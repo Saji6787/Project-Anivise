@@ -14,8 +14,7 @@ Features:
 
 Installation & Setup:
 1. Clone the Repository:
-   git clone https://github.com/Saji6787/Project-Anivise.git
-   cd anivise
+   git clone https://github.com/Saji6787/Project-Anivise.git, and then cd anivise
 
 2. Install Dependencies:
    npm install
