@@ -14,7 +14,7 @@ Features:
 
 Installation & Setup:
 1. Clone the Repository:
-   git clone https://github.com/your-username/anivise.git
+   git clone https://github.com/Saji6787/Project-Anivise.git
    cd anivise
 
 2. Install Dependencies:
