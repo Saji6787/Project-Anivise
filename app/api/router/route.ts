@@ -28,7 +28,11 @@ export async function POST(req: Request) {
         const url = `${JIKAN_BASE}/anime?start_date=${year}-01-01&end_date=${year}-12-31&limit=${params.limit || 20}`;
         const res = await fetch(url);
         const j = await res.json();
-        return NextResponse.json({ intent, data: j.data ?? [] });
+            const limit = params?.top_n ?? 10;
+            return NextResponse.json({
+            intent,
+            data: (j.data ?? []).slice(0, limit)
+            });
       }
 
       case "anime_recommendation_general": {
@@ -36,14 +40,24 @@ export async function POST(req: Request) {
         const url = `${JIKAN_BASE}/anime?q=${encodeURIComponent(q)}&limit=${params.limit || 20}`;
         const res = await fetch(url);
         const j = await res.json();
-        return NextResponse.json({ intent, data: j.data ?? [] });
+        const limit = params?.top_n ?? 10;
+            return NextResponse.json({
+            intent,
+            data: (j.data ?? []).slice(0, limit)
+            });
+
       }
 
       case "anime_search": {
         const q = params?.query || "";
         const res = await fetch(`${JIKAN_BASE}/anime?q=${encodeURIComponent(q)}&limit=${params.limit || 10}`);
         const j = await res.json();
-        return NextResponse.json({ intent, data: j.data ?? [] });
+            const limit = params?.top_n ?? 10;
+            return NextResponse.json({
+            intent,
+            data: (j.data ?? []).slice(0, limit)
+            });
+
       }
 
       case "anime_info": {
@@ -101,7 +115,12 @@ export async function POST(req: Request) {
         const res = await fetch(url);
         const j = await res.json();
         // j.data is array of schedules
-        return NextResponse.json({ intent, data: j.data ?? [] });
+            const limit = params?.top_n ?? 10;
+            return NextResponse.json({
+            intent,
+            data: (j.data ?? []).slice(0, limit)
+            });
+
       }
 
       case "episode_list": {
@@ -112,19 +131,32 @@ export async function POST(req: Request) {
         const animeId = found.mal_id;
         const res = await fetch(`${JIKAN_BASE}/anime/${animeId}/episodes`);
         const j = await res.json();
-        return NextResponse.json({ intent, data: j.data ?? [] });
+            const limit = params?.top_n ?? 10;
+            return NextResponse.json({
+            intent,
+            data: (j.data ?? []).slice(0, limit)
+            });
       }
 
       case "trending_now": {
         const res = await fetch(`${JIKAN_BASE}/top/anime`);
         const j = await res.json();
-        return NextResponse.json({ intent, data: j.data ?? [] });
+        const limit = params?.top_n ?? 10;
+        return NextResponse.json({
+        intent,
+        data: (j.data ?? []).slice(0, limit)
+        });
+
       }
 
       case "top_all_time": {
         const res = await fetch(`${JIKAN_BASE}/top/anime`);
         const j = await res.json();
-        return NextResponse.json({ intent, data: j.data ?? [] });
+            const limit = params?.top_n ?? 10;
+            return NextResponse.json({
+            intent,
+            data: (j.data ?? []).slice(0, limit)
+            });
       }
 
       default:

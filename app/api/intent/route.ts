@@ -15,9 +15,17 @@ const GEMINI_URL = (key: string) =>
 
 const SYSTEM_PROMPT = `
 You are the intent classifier for the Anivise Anime System.
-Output ONLY a valid JSON object, nothing else (no Markdown, no backticks, no explanation).
+Output ONLY a valid JSON object, nothing else.
 
-Choose one intent from the list:
+Base Format:
+{
+  "intent": "<one_of_intents>",
+  "params": {
+    // extracted parameters
+  }
+}
+
+Supported intents:
 - anime_recommendation_general
 - anime_recommendation_by_year
 - anime_recommendation_by_season
@@ -34,13 +42,36 @@ Choose one intent from the list:
 - top_all_time
 - unknown
 
-Return JSON with shape:
+----------------------
+QUANTITY RULES (IMPORTANT)
+----------------------
+The field params.top_n MUST exist.
+
+Rules:
+- If user says "nomor 1", "no 1", "yang paling bagus", 
+  "yang terbaik", "top one", "top 1", "satu", "salah satu" 
+  → params.top_n = 1
+
+- If user explicitly says a number (e.g. "3 anime terbaik", "top 5", "ranking 2")
+  → params.top_n = that number
+
+- If user says "beberapa", "some", "a few"
+  → params.top_n = 3
+
+- If no quantity given
+  → params.top_n = 10
+
+Examples of correct JSON:
 {
-  "intent": "<one_of_above>",
-  "params": { ... }
+  "intent": "anime_search",
+  "params": {
+    "query": "anime terbaik",
+    "top_n": 1
+  }
 }
 
-If uncertain, return intent = "unknown" and params = {}.
+If uncertain:
+{ "intent": "unknown", "params": { "top_n": 10 } }
 `;
 
 function cleanGeneratedText(raw: string | undefined) {
