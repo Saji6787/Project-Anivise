@@ -14,6 +14,42 @@ export default function IntentRender({
 
   switch (intent) {
     case "character_best":
+
+    case "anime_recommendation_by_genre":
+        return (
+            <div className="space-y-4">
+            <h2 className="text-xl font-bold capitalize">
+                Top {data.length} Anime in Genre: {data[0]?.genres?.[0]?.name ?? ""}
+            </h2>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {data.slice(0, 10).map((anime: any, i: number) => (
+                <div
+                    key={i}
+                    className="p-4 border rounded-lg bg-neutral-900 text-white shadow"
+                >
+                    <img
+                    src={anime.images?.jpg?.image_url}
+                    alt={anime.title}
+                    className="w-full h-56 object-cover rounded"
+                    />
+
+                    <h3 className="text-lg font-semibold mt-2">{anime.title}</h3>
+
+                    <p className="text-sm text-gray-300">
+                    Score: {anime.score ?? "N/A"}
+                    </p>
+
+                    <p className="text-sm text-gray-400 line-clamp-3">
+                    {anime.synopsis ?? "No synopsis available."}
+                    </p>
+                </div>
+                ))}
+            </div>
+            </div>
+        );
+
+
     case "character_info":
       return <CharacterCarousel data={data} />;
 

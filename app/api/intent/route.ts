@@ -1,31 +1,39 @@
+// app/api/intent/route.ts
 import { NextResponse } from "next/server";
 
 /**
- * Intent parser: calls Gemini to convert a free-text user prompt
- * into { intent, params } JSON. Returns { intent, params }.
+ * Intent parser: ask Gemini (gemini-2.5-flash) to return strict JSON:
+ * { intent: string, params: { top_n:number, query?, year?, genre?, character?, season?, ... } }
  *
- * Notes:
- * - Use model gemini-2.5-flash (available in your key). See /mnt/data/models.json.
- * - Make the system instruction strict: only JSON output.
+ * Note: This endpoint is intentionally strict and defensive.
  */
 
 const GEMINI_MODEL = "gemini-2.5-flash";
 const GEMINI_URL = (key: string) =>
   `https://generativelanguage.googleapis.com/v1/models/${GEMINI_MODEL}:generateContent?key=${key}`;
 
+/* Strong system prompt: must return JSON only.
+   We include explicit quantity rules so top_n is always present.
+*/
 const SYSTEM_PROMPT = `
-You are the intent classifier for the Anivise Anime System.
-Output ONLY a valid JSON object, nothing else.
+You are an intent parser for an anime website called Anivise.
+Output STRICT JSON ONLY (no markdown, no commentary, no backticks).
 
-Base Format:
+Output schema:
 {
   "intent": "<one_of_intents>",
   "params": {
-    // extracted parameters
+    "query": string | null,
+    "year": number | null,
+    "season": "winter"|"spring"|"summer"|"fall" | null,
+    "genre": string | null,
+    "character": string | null,
+    "top_n": number,
+    "extras": { ... } // optional
   }
 }
 
-Supported intents:
+Valid intents:
 - anime_recommendation_general
 - anime_recommendation_by_year
 - anime_recommendation_by_season
@@ -42,64 +50,54 @@ Supported intents:
 - top_all_time
 - unknown
 
-----------------------
-QUANTITY RULES (IMPORTANT)
-----------------------
-The field params.top_n MUST exist.
+QUANTITY RULES:
+- If user says "salah satu", "nomor 1", "no 1", "top 1", "one", "satu", "yang terbaik", set params.top_n = 1
+- If user says explicit number (e.g. "3 anime terbaik"), set params.top_n to that number
+- If user says "beberapa", "a few", set params.top_n = 3
+- If user gives no quantity, default params.top_n = 10
 
-Rules:
-- If user says "nomor 1", "no 1", "yang paling bagus", 
-  "yang terbaik", "top one", "top 1", "satu", "salah satu" 
-  → params.top_n = 1
-
-- If user explicitly says a number (e.g. "3 anime terbaik", "top 5", "ranking 2")
-  → params.top_n = that number
-
-- If user says "beberapa", "some", "a few"
-  → params.top_n = 3
-
-- If no quantity given
-  → params.top_n = 10
-
-Examples of correct JSON:
+Examples:
+User: "Salah satu anime terbaik di tahun 2020"
+Output:
 {
-  "intent": "anime_search",
-  "params": {
-    "query": "anime terbaik",
-    "top_n": 1
-  }
+  "intent": "anime_recommendation_by_year",
+  "params": { "year": 2020, "top_n": 1 }
 }
 
-If uncertain:
-{ "intent": "unknown", "params": { "top_n": 10 } }
+User: "Who is the most popular character in Naruto?"
+Output:
+{
+  "intent": "character_best",
+  "params": { "query": "Naruto", "top_n": 1 }
+}
 `;
 
-function cleanGeneratedText(raw: string | undefined) {
-  if (!raw) return "";
+// small sanitizer
+function sanitizeRaw(raw?: string) {
+  if (!raw) return "{}";
   let s = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
-  // cut everything before first { or [
-  const iObj = s.indexOf("{");
-  const iArr = s.indexOf("[");
-  const first = Math.min(iObj === -1 ? Infinity : iObj, iArr === -1 ? Infinity : iArr);
-  if (first !== Infinity) s = s.slice(first);
-  // remove trailing extraneous text after JSON (best-effort): keep until last } or ]
-  const lastObj = s.lastIndexOf("}");
-  const lastArr = s.lastIndexOf("]");
-  const last = Math.max(lastObj, lastArr);
-  if (last !== -1) s = s.slice(0, last + 1);
+  const firstObj = Math.min(
+    s.indexOf("{") === -1 ? Infinity : s.indexOf("{"),
+    s.indexOf("[") === -1 ? Infinity : s.indexOf("[")
+  );
+  if (firstObj !== Infinity) s = s.slice(firstObj);
+  const lastObj = Math.max(s.lastIndexOf("}"), s.lastIndexOf("]"));
+  if (lastObj !== -1) s = s.slice(0, lastObj + 1);
   return s.trim();
 }
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const prompt: string = body.prompt?.toString() ?? "";
-    if (!prompt) return NextResponse.json({ intent: "unknown", params: {} });
+    const { prompt } = await req.json();
+    if (!prompt || typeof prompt !== "string") {
+      return NextResponse.json({ intent: "unknown", params: { top_n: 10 } });
+    }
 
     const key = process.env.GEMINI_API_KEY;
-    if (!key) return NextResponse.json({ error: "Missing GEMINI_API_KEY" }, { status: 500 });
+    if (!key) {
+      return NextResponse.json({ error: "Missing GEMINI_API_KEY" }, { status: 500 });
+    }
 
-    // Build request for Gemini: system instruction + user prompt
     const payload = {
       contents: [
         { parts: [{ text: SYSTEM_PROMPT }] },
@@ -107,31 +105,53 @@ export async function POST(req: Request) {
       ],
     };
 
-    const resp = await fetch(GEMINI_URL(key), {
+    const res = await fetch(GEMINI_URL(key), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
-    const json = await resp.json();
-
+    const json = await res.json();
     const raw = json?.candidates?.[0]?.content?.parts?.[0]?.text;
-    const cleaned = cleanGeneratedText(raw);
+    const cleaned = sanitizeRaw(raw);
 
     try {
       const parsed = JSON.parse(cleaned);
-      // Basic validation
-      if (!parsed || typeof parsed.intent !== "string" || typeof parsed.params !== "object") {
-        return NextResponse.json({ intent: "unknown", params: {} });
-      }
-      return NextResponse.json(parsed);
+
+      // Defensive normalization:
+      const intent = parsed?.intent ?? "unknown";
+      const params = parsed?.params ?? {};
+      params.top_n = Number(params.top_n ?? params.limit ?? 10) || 10;
+
+      // ensure numeric year if present
+      if (params.year) params.year = Number(params.year);
+
+      return NextResponse.json({ intent, params });
     } catch (err) {
       console.error("Intent parse failed:", err);
-      console.log("CLEANED:", cleaned);
-      return NextResponse.json({ intent: "unknown", params: {} });
+      console.log("CLEANED INTENT TEXT:", cleaned);
+      // fallback: try keyword heuristics quickly (lightweight)
+      const lower = prompt.toLowerCase();
+      let top_n = 10;
+      if (/(salah satu|nomor 1|no 1|top 1|one|satu|yang terbaik)/i.test(lower)) top_n = 1;
+      if (/(beberapa|a few|some)/i.test(lower)) top_n = 3;
+      const yearMatch = prompt.match(/(19|20)\d{2}/);
+      const year = yearMatch ? Number(yearMatch[0]) : null;
+
+      // quick heuristic to choose intent
+      let heuristicIntent = "anime_recommendation_general";
+      if (/rating|score|rate|rating lookup|berapa rating/i.test(lower)) heuristicIntent = "rating_lookup";
+      if (/character|karakter|who is|siapa/i.test(lower)) heuristicIntent = "character_best";
+      if (/episode|episodes|episode list/i.test(lower)) heuristicIntent = "episode_list";
+      if (/airing|schedule|tayang/i.test(lower)) heuristicIntent = "airing_schedule";
+
+      return NextResponse.json({
+        intent: heuristicIntent,
+        params: { query: prompt, year, top_n },
+      });
     }
   } catch (err) {
     console.error(err);
-    return NextResponse.json({ intent: "unknown", params: {} }, { status: 500 });
+    return NextResponse.json({ intent: "unknown", params: { top_n: 10 } }, { status: 500 });
   }
 }
