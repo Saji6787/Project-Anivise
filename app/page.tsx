@@ -4,56 +4,65 @@
 import { useState } from "react";
 import InputBox from "./components/InputBox";
 import Loader from "./components/Loader";
-import AnimeCard from "./components/AnimeCard";
+import IntentRender from "./components/IntentRender";
 
 export default function Home() {
   const [prompt, setPrompt] = useState("");
-  const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Final data format: { intent: string, data: any[] }
+  const [result, setResult] = useState<{
+    intent?: string;
+    data?: any[];
+  }>({ intent: undefined, data: [] });
+
+  const [error, setError] = useState<string | null>(null);
 
   const sendPrompt = async () => {
     if (!prompt.trim()) return;
 
     setLoading(true);
-    setResults([]);
-
-    const res = await fetch("/api/recommend", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt }),
-    });
-
-    const data = await res.json();
-
-    // Extract JSON text from Gemini response
-    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-
-    console.log("RAW RESPONSE FROM GEMINI:", raw);
-
-    let jsonData = [];
+    setError(null);
+    setResult({ intent: undefined, data: [] });
 
     try {
-      // Clean extra formatting Gemini sometimes adds
-      const cleaned = raw
-        .replace(/```json/gi, "")
-        .replace(/```/g, "")
-        .replace(/^[^{\[]+/, "") // remove everything before first { or [
-        .trim();
+      // ============================
+      // 1) CALL INTENT PARSER API
+      // ============================
+      const intentRes = await fetch("/api/intent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
 
-      jsonData = JSON.parse(cleaned);
+      const intentData = await intentRes.json();
+      console.log("INTENT RESULT:", intentData);
+
+      if (!intentData || intentData.intent === "unknown") {
+        setError("I couldn't understand your request.");
+        setLoading(false);
+        return;
+      }
+
+      // ============================
+      // 2) CALL ROUTER (JIKAN DATA FETCH)
+      // ============================
+      const routerRes = await fetch("/api/router", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(intentData),
+      });
+
+      const finalResult = await routerRes.json();
+      console.log("ROUTER RESULT:", finalResult);
+
+      setResult({
+        intent: finalResult.intent,
+        data: finalResult.data ?? [],
+      });
     } catch (err) {
-      console.error("JSON Parse Failed:", err);
-      console.error("RAW TEXT:", raw);
-    }
-
-    if (Array.isArray(jsonData)) {
-      setResults(jsonData);
-    } else if (typeof jsonData === "object" && jsonData !== null) {
-      // Convert object → array
-      const arr = Object.values(jsonData).filter((v) => v && typeof v === "object");
-      setResults(arr);
-    } else {
-      setResults([]);
+      console.error(err);
+      setError("Request failed. Check console.");
     }
 
     setLoading(false);
@@ -61,8 +70,10 @@ export default function Home() {
 
   return (
     <div className="space-y-6">
+      {/* Title */}
       <h1 className="text-3xl font-bold">Anivise</h1>
 
+      {/* Input box */}
       <InputBox
         prompt={prompt}
         setPrompt={setPrompt}
@@ -70,13 +81,14 @@ export default function Home() {
         loading={loading}
       />
 
+      {/* Loading animation */}
       {loading && <Loader />}
 
-      <div className="space-y-4">
-        {results.map((anime: any, i: number) => (
-          <AnimeCard key={i} anime={anime} />
-        ))}
-      </div>
+      {/* Error message */}
+      {error && <div className="text-red-400">{error}</div>}
+
+      {/* Final Renderer for UI */}
+      <IntentRender intent={result.intent} data={result.data} />
     </div>
   );
 }

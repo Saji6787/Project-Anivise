@@ -1,22 +1,35 @@
 "use client";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export default function InputBox({ prompt, setPrompt, onSend, loading }: any) {
+interface Props {
+  prompt: string;
+  setPrompt: (v: string) => void;
+  onSend: () => void;
+  loading: boolean;
+}
+
+export default function InputBox({ prompt, setPrompt, onSend, loading }: Props) {
+  const send = () => {
+    if (loading) return;
+    onSend();
+  };
+
   return (
-    <div className="space-y-3">
-      <textarea
-        className="w-full p-3 bg-zinc-900 border border-zinc-700 rounded-lg focus:outline-none focus:border-white transition"
-        rows={3}
-        placeholder="Tulis permintaan anime (contoh: rekomendasi anime action 2018)..."
+    <div className="flex gap-2 items-center">
+      <input
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && send()}
+        className="flex-1 bg-zinc-900 border border-zinc-700 px-4 py-3 rounded-lg text-white
+                   placeholder-zinc-500 focus:outline-none"
+        placeholder="Type your anime question..."
       />
+
       <button
-        onClick={onSend}
+        onClick={send}
         disabled={loading}
-        className="bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-800 py-2 px-4 rounded-lg font-medium w-full"
+        className="px-4 py-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 transition disabled:opacity-50"
       >
-        {loading ? "Loading..." : "Kirim"}
+        Send
       </button>
     </div>
   );

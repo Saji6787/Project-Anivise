@@ -1,8 +1,7 @@
 export default function Loader() {
   return (
-    <div className="text-center py-6">
-      <div className="animate-spin rounded-full h-8 w-8 border-2 border-zinc-600 border-t-white mx-auto"></div>
-      <p className="text-zinc-400 text-sm mt-3">Sedang memproses...</p>
+    <div className="flex justify-center py-6">
+      <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
     </div>
   );
 }
