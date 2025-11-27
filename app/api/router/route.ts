@@ -152,6 +152,7 @@ export async function POST(req: Request) {
       if (!title) return NextResponse.json({ intent, data: [] });
 
       const found = await searchAnimeByTitle(title);
+      // Ensure we return an array with the found item
       return NextResponse.json({ intent, data: found ? [found] : [] });
     }
 
@@ -205,9 +206,9 @@ export async function POST(req: Request) {
     }
 
     // =====================================================
-    // 8) CHARACTER INFO
+    // 8) CHARACTER INFO & SEARCH
     // =====================================================
-    if (intent === "character_info") {
+    if (intent === "character_info" || intent === "character_search") {
       const query = params?.character || params?.query;
       if (!query) return NextResponse.json({ intent, data: [] });
 
